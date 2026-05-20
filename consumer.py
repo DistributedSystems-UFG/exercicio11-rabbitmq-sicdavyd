@@ -1,9 +1,34 @@
-import rabbitpy
-from const import *
+import asyncio
+import sys
 
-with rabbitpy.Connection('amqp://myuser:abc123@' + RABBITMQ_ADDR + ':5672/my_vhost') as conn:
-    with conn.channel() as channel:
-        queue = rabbitpy.Queue(channel, 'my-queue', exclusive=True)
-        for message in queue:
-            print(message.body)
-            message.ack()
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+import time
+import rabbitpy
+from configuracoes import url_amqp, FILA_COMIDA
+
+TEMPO_PREPARO = 2  # segundos simulando preparo
+
+
+def processar_pedido(msg) -> str:
+    pedido = msg.body.decode()
+    print(f'[Cozinha] Recebido: {pedido}')
+    time.sleep(TEMPO_PREPARO)
+    print(f'[Cozinha] Pronto:   {pedido}')
+    msg.ack()
+    return pedido
+
+
+def iniciar_cozinha():
+    print('[Cozinha] Aguardando pedidos de comida...')
+    with rabbitpy.Connection(url_amqp()) as conn:
+        with conn.channel() as canal:
+            fila = rabbitpy.Queue(canal, FILA_COMIDA, durable=True, auto_delete=False)
+            fila.declare()
+            for msg in fila:
+                processar_pedido(msg)
+
+
+if __name__ == '__main__':
+    iniciar_cozinha()
